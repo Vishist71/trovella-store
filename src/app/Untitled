@@ -1,0 +1,720 @@
+"use client";
+import React, { useState, useEffect } from "react";
+import { 
+  ShoppingBag, 
+  Sparkles, 
+  X, 
+  CheckCircle, 
+  ShieldCheck, 
+  Droplets, 
+  Truck, 
+  RefreshCw,
+  ArrowRight,
+  User,
+  Phone,
+  KeyRound,
+  LogOut,
+  MapPin
+} from "lucide-react";
+import Link from "next/link";
+import { supabase } from "@/lib/supabase";
+
+export default function Home() {
+  const [activeCategory, setActiveCategory] = useState("All");
+  const [cart, setCart] = useState<any[]>([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
+  const [orderPlaced, setOrderPlaced] = useState(false);
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Customer Auth States
+  const [customerUser, setCustomerUser] = useState<any>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [authStep, setAuthStep] = useState<"phone" | "otp">("phone");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [enteredOtp, setEnteredOtp] = useState("");
+  const [generatedOtp, setGeneratedOtp] = useState("");
+  const [pendingActionProduct, setPendingActionProduct] = useState<any | null>(null);
+
+  // Customer Delivery & Profile Details
+  const [customer, setCustomer] = useState({
+    name: "",
+    phone: "",
+    address: "",
+    city: "",
+    pincode: "",
+    paymentMethod: "cod"
+  });
+
+  // Load saved customer session from browser storage
+  useEffect(() => {
+    const savedUser = localStorage.getItem("trovella_customer");
+    if (savedUser) {
+      const parsed = JSON.parse(savedUser);
+      setCustomerUser(parsed);
+      setCustomer(prev => ({
+        ...prev,
+        name: parsed.name || "",
+        phone: parsed.phone || "",
+        address: parsed.address || "",
+        city: parsed.city || "",
+        pincode: parsed.pincode || ""
+      }));
+    }
+  }, []);
+
+  // Fetch real products from Supabase
+  const fetchProducts = async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from("products")
+      .select("*")
+      .order("id", { ascending: false });
+    if (data) setProducts(data);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const filteredProducts = activeCategory === "All" 
+    ? products 
+    : products.filter(p => p.category?.toLowerCase() === activeCategory.toLowerCase());
+
+  // Intercept Add to Cart: Trigger Login if not authenticated
+  const handleAddToCartAttempt = (product: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!customerUser) {
+      setPendingActionProduct(product);
+      setIsAuthModalOpen(true);
+      return;
+    }
+    executeAddToCart(product);
+  };
+
+  const executeAddToCart = (product: any) => {
+    setCart(prev => {
+      const exists = prev.find(item => item.id === product.id);
+      if (exists) {
+        return prev.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
+      }
+      return [...prev, { ...product, quantity: 1 }];
+    });
+    setIsCartOpen(true);
+  };
+
+  // Trigger Send OTP
+  const handleSendOtp = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (phoneNumber.length < 10) {
+      alert("Please enter a valid 10-digit mobile number.");
+      return;
+    }
+    // Generate 4-digit demo OTP
+    const mockOtp = Math.floor(1000 + Math.random() * 9000).toString();
+    setGeneratedOtp(mockOtp);
+    setAuthStep("otp");
+  };
+
+  // Verify OTP & Save Customer Profile
+  const handleVerifyOtp = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (enteredOtp !== generatedOtp && enteredOtp !== "1234") {
+      alert("Invalid OTP code entered. Please check again.");
+      return;
+    }
+
+    const newProfile = {
+      phone: phoneNumber,
+      name: customer.name || "Trovella Member",
+      address: customer.address || "",
+      city: customer.city || "",
+      pincode: customer.pincode || "",
+      joinedAt: new Date().toLocaleDateString()
+    };
+
+    setCustomerUser(newProfile);
+    localStorage.setItem("trovella_customer", JSON.stringify(newProfile));
+    setIsAuthModalOpen(false);
+    setAuthStep("phone");
+    setEnteredOtp("");
+
+    // Auto complete the action user clicked before login
+    if (pendingActionProduct) {
+      executeAddToCart(pendingActionProduct);
+      setPendingActionProduct(null);
+    }
+  };
+
+  // Logout Customer
+  const handleCustomerLogout = () => {
+    localStorage.removeItem("trovella_customer");
+    setCustomerUser(null);
+    setIsProfileModalOpen(false);
+  };
+
+  // Save Updated Profile
+  const handleSaveProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updated = {
+      ...customerUser,
+      name: customer.name,
+      address: customer.address,
+      city: customer.city,
+      pincode: customer.pincode
+    };
+    setCustomerUser(updated);
+    localStorage.setItem("trovella_customer", JSON.stringify(updated));
+    alert("Profile saved successfully!");
+    setIsProfileModalOpen(false);
+  };
+
+  const totalCartValue = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+
+  const handlePlaceOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customer.name || !customerUser?.phone || !customer.address || !customer.pincode) {
+      alert("Please fill all delivery details!");
+      return;
+    }
+
+    const { error } = await supabase.from("orders").insert([
+      {
+        customer_name: customer.name,
+        phone: customerUser.phone,
+        address: customer.address,
+        city: customer.city,
+        pincode: customer.pincode,
+        payment_method: customer.paymentMethod,
+        total_amount: totalCartValue,
+        items: cart,
+        status: "Pending"
+      }
+    ]);
+
+    if (error) {
+      alert("Order placing failed: " + error.message);
+    } else {
+      setOrderPlaced(true);
+      setCart([]);
+    }
+  };
+
+  const categories = ["All", "Bracelets", "Rings", "Necklaces", "Earrings"];
+
+  return (
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#FAF9F6] text-[#1A1A1A] font-sans antialiased selection:bg-[#C5A880] selection:text-white">
+      
+      {/* Top Banner */}
+      <aside className="w-full max-w-full overflow-x-hidden bg-[#1A1A1A] text-white text-[11px] md:text-xs py-2 px-3 sm:px-4 text-center font-medium tracking-wide flex justify-center items-center gap-2">
+        <Sparkles className="w-3.5 h-3.5 text-[#C5A880] animate-pulse shrink-0" />
+        <span className="min-w-0 leading-snug">Festive Sale Live: <strong>Flat 50% OFF + Lifetime Anti-Tarnish Warranty</strong></span>
+      </aside>
+
+      {/* Header */}
+      <header className="sticky top-0 z-40 w-full max-w-full overflow-x-hidden bg-white/90 backdrop-blur-md border-b border-gray-100">
+        <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 min-w-0">
+          <Link href="/" className="font-serif text-xl sm:text-2xl tracking-[0.2em] sm:tracking-widest font-bold uppercase text-[#1A1A1A] shrink-0">
+            TROVELLA<span className="text-[#C5A880]">.</span>
+          </Link>
+
+          <nav className="hidden md:flex items-center gap-8 text-xs uppercase tracking-widest font-semibold text-gray-600 min-w-0">
+            {categories.map((cat) => (
+              <button 
+                key={cat}
+                onClick={() => setActiveCategory(cat)} 
+                className={`hover:text-black transition cursor-pointer ${activeCategory === cat ? "text-black border-b-2 border-black pb-1" : ""}`}
+              >
+                {cat === "All" ? "All Jewels" : cat}
+              </button>
+            ))}
+          </nav>
+
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+            {customerUser ? (
+              <button 
+                onClick={() => setIsProfileModalOpen(true)}
+                className="flex items-center gap-1.5 text-xs font-semibold bg-gray-100 px-3 py-1.5 rounded-full hover:bg-gray-200 transition cursor-pointer"
+              >
+                <User className="w-3.5 h-3.5 text-[#9E7D4C]" />
+                <span className="max-w-[90px] truncate">{customerUser.name || customerUser.phone}</span>
+              </button>
+            ) : (
+              <button 
+                onClick={() => setIsAuthModalOpen(true)}
+                className="flex items-center gap-1.5 text-xs font-bold bg-[#1A1A1A] text-white px-3.5 py-1.5 rounded-full hover:bg-black transition cursor-pointer"
+              >
+                <User className="w-3.5 h-3.5 text-[#C5A880]" />
+                <span>Login</span>
+              </button>
+            )}
+
+            <button onClick={() => setIsCartOpen(true)} className="relative p-2 text-gray-800 hover:text-black cursor-pointer">
+              <ShoppingBag className="w-5 h-5" />
+              {cart.length > 0 && (
+                <span className="absolute top-0 right-0 bg-[#C5A880] text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                  {cart.reduce((t, i) => t + i.quantity, 0)}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <section className="w-full max-w-full overflow-x-hidden bg-[#F4F0EA] border-b border-[#EBE3D5] py-10 sm:py-14 px-4 text-center">
+        <div className="max-w-3xl mx-auto w-full space-y-4">
+          <span className="inline-block max-w-full text-[10px] sm:text-[11px] uppercase tracking-[0.12em] sm:tracking-[0.2em] font-bold text-[#9E7D4C] bg-white px-3 py-1 rounded-full border border-[#E8DFC8] leading-snug">
+            Anti-Tarnish • Waterproof • 18K Gold Plated
+          </span>
+          <h1 className="text-3xl sm:text-5xl font-serif font-bold text-[#1A1A1A] leading-tight break-words">
+            Everyday Fine Jewellery
+          </h1>
+          <p className="text-xs sm:text-sm text-gray-600 max-w-xl mx-auto leading-relaxed">
+            Crafted with 316L premium stainless steel & 18K gold vacuum plating. Sweat, perfume, and water resistant for lifelong daily wear.
+          </p>
+        </div>
+      </section>
+
+      {/* Trust Badges */}
+      <div className="w-full max-w-full overflow-x-hidden border-b border-gray-100">
+        <div className="max-w-7xl mx-auto w-full px-4 py-8 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+          <div className="flex flex-col items-center p-3">
+            <Droplets className="w-5 h-5 text-[#C5A880] mb-2" />
+            <h4 className="text-xs font-bold text-gray-900">100% Waterproof</h4>
+            <p className="text-[10px] text-gray-500">Wear in shower & workouts</p>
+          </div>
+          <div className="flex flex-col items-center p-3">
+            <ShieldCheck className="w-5 h-5 text-[#C5A880] mb-2" />
+            <h4 className="text-xs font-bold text-gray-900">Anti-Tarnish Warranty</h4>
+            <p className="text-[10px] text-gray-500">Never turns skin green</p>
+          </div>
+          <div className="flex flex-col items-center p-3">
+            <Truck className="w-5 h-5 text-[#C5A880] mb-2" />
+            <h4 className="text-xs font-bold text-gray-900">Free Fast Delivery</h4>
+            <p className="text-[10px] text-gray-500">All India shipping</p>
+          </div>
+          <div className="flex flex-col items-center p-3">
+            <RefreshCw className="w-5 h-5 text-[#C5A880] mb-2" />
+            <h4 className="text-xs font-bold text-gray-900">Easy Exchanges</h4>
+            <p className="text-[10px] text-gray-500">Hassle-free 7-day policy</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Products Catalog */}
+      <main className="w-full max-w-full overflow-x-hidden">
+        <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-12 min-w-0">
+          <div className="flex flex-col gap-4 mb-8 border-b pb-4 w-full min-w-0 md:flex-row md:items-end md:justify-between">
+            <div className="min-w-0">
+              <h2 className="text-2xl font-serif font-bold">Curated Collection</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Showing {filteredProducts.length} handcrafted pieces</p>
+            </div>
+            
+            <div className="w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x no-scrollbar md:w-auto">
+              <div className="flex w-max gap-2 pb-1">
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveCategory(cat)}
+                    className={`shrink-0 text-xs px-3 py-1.5 rounded-full font-medium transition cursor-pointer whitespace-nowrap ${
+                      activeCategory === cat ? "bg-black text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="text-center py-20 text-xs text-gray-500 font-semibold">Loading catalogue...</div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="text-center py-16 bg-white rounded-3xl border border-gray-200 p-8 max-w-sm mx-auto shadow-sm">
+              <ShoppingBag className="w-10 h-10 mx-auto text-gray-300 mb-2" />
+              <h3 className="font-bold text-sm">No items in this category</h3>
+              <p className="text-xs text-gray-500 mt-1 mb-4">Check back soon for new arrivals in this category.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+              {filteredProducts.map((product) => (
+                <div 
+                  key={product.id} 
+                  onClick={() => setSelectedProduct(product)}
+                  className="group min-w-0 bg-white rounded-2xl border border-gray-100 p-3 flex flex-col justify-between hover:shadow-xl transition-all duration-300 cursor-pointer"
+                >
+                  <div className="relative aspect-square overflow-hidden rounded-xl bg-gray-50 mb-3">
+                    <span className="absolute top-2.5 left-2.5 z-10 bg-white/95 backdrop-blur-sm text-[9px] font-bold uppercase px-2 py-0.5 rounded-md border border-gray-100 shadow-sm">
+                      {product.tag || "Anti-Tarnish"}
+                    </span>
+                    <img 
+                      src={product.image_url} 
+                      alt={product.title} 
+                      className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1611591475102-4ab8c4d7342d?q=80&w=800";
+                      }}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-[#C5A880] uppercase tracking-wider font-bold">{product.category}</span>
+                    <h3 className="font-semibold text-xs md:text-sm text-gray-900 truncate group-hover:text-[#9E7D4C] transition">{product.title}</h3>
+                    <div className="flex items-center gap-2 pt-0.5">
+                      <span className="text-sm md:text-base font-bold text-gray-900">₹{product.price}</span>
+                      {product.mrp && <span className="text-xs text-gray-400 line-through">₹{product.mrp}</span>}
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={(e) => handleAddToCartAttempt(product, e)}
+                    className="mt-3 w-full bg-[#1A1A1A] text-white py-2 rounded-xl text-xs font-semibold hover:bg-black transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <ShoppingBag className="w-3.5 h-3.5" /> Add to Bag
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* --- CUSTOMER PHONE + OTP LOGIN MODAL --- */}
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative space-y-4">
+            <button 
+              onClick={() => setIsAuthModalOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-black cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="text-center space-y-1">
+              <div className="w-12 h-12 bg-amber-50 rounded-2xl border border-amber-200 flex items-center justify-center mx-auto text-[#9E7D4C] mb-2">
+                <Phone className="w-6 h-6" />
+              </div>
+              <h3 className="font-serif font-bold text-xl text-gray-900">Welcome to Trovella</h3>
+              <p className="text-xs text-gray-500">Sign in with mobile number to proceed with your bag</p>
+            </div>
+
+            {authStep === "phone" ? (
+              <form onSubmit={handleSendOtp} className="space-y-4 text-xs">
+                <div>
+                  <label className="font-semibold block mb-1 text-gray-700">Mobile Number</label>
+                  <div className="flex">
+                    <span className="inline-flex items-center px-3 bg-gray-100 border border-r-0 border-gray-300 rounded-l-xl text-gray-600 font-bold">+91</span>
+                    <input 
+                      type="tel" 
+                      maxLength={10}
+                      required 
+                      placeholder="9876543210" 
+                      value={phoneNumber} 
+                      onChange={e => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
+                      className="w-full p-2.5 border border-gray-300 rounded-r-xl focus:outline-none focus:border-black font-semibold text-sm"
+                    />
+                  </div>
+                </div>
+                <button type="submit" className="w-full bg-[#1A1A1A] text-white py-3 rounded-xl font-bold uppercase tracking-wider hover:bg-black transition cursor-pointer">
+                  Send OTP Code
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyOtp} className="space-y-4 text-xs">
+                <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-center">
+                  <p className="text-[11px] text-gray-600">Verification code sent to <strong>+91 {phoneNumber}</strong></p>
+                  <p className="text-xs font-mono font-bold text-[#9E7D4C] mt-1">Your Demo OTP is: {generatedOtp}</p>
+                </div>
+
+                <div>
+                  <label className="font-semibold block mb-1 text-gray-700">Enter 4-Digit OTP</label>
+                  <input 
+                    type="text" 
+                    maxLength={4}
+                    required 
+                    placeholder="••••" 
+                    value={enteredOtp} 
+                    onChange={e => setEnteredOtp(e.target.value)}
+                    className="w-full p-2.5 text-center text-lg font-mono tracking-widest border border-gray-300 rounded-xl focus:outline-none focus:border-black font-bold"
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <button 
+                    type="button" 
+                    onClick={() => setAuthStep("phone")}
+                    className="w-1/3 bg-gray-100 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-200 cursor-pointer"
+                  >
+                    Change
+                  </button>
+                  <button type="submit" className="w-2/3 bg-[#1A1A1A] text-white py-3 rounded-xl font-bold uppercase tracking-wider hover:bg-black cursor-pointer">
+                    Verify & Continue
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* --- CUSTOMER PROFILE & SAVED ADDRESS MODAL --- */}
+      {isProfileModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-[#9E7D4C]">
+                  <User className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">Customer Profile</h3>
+                  <p className="text-[10px] text-gray-500">+91 {customerUser?.phone}</p>
+                </div>
+              </div>
+              <button onClick={() => setIsProfileModalOpen(false)} className="text-gray-400 hover:text-black cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProfile} className="space-y-3 text-xs">
+              <div>
+                <label className="font-semibold block mb-1 text-gray-700">Full Name</label>
+                <input 
+                  type="text" 
+                  placeholder="Your Name" 
+                  value={customer.name} 
+                  onChange={e => setCustomer({...customer, name: e.target.value})} 
+                  className="w-full p-2.5 border rounded-xl" 
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold block mb-1 text-gray-700">Default Shipping Address</label>
+                <textarea 
+                  rows={2} 
+                  placeholder="Flat, Street, Area..." 
+                  value={customer.address} 
+                  onChange={e => setCustomer({...customer, address: e.target.value})} 
+                  className="w-full p-2.5 border rounded-xl" 
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold block mb-1 text-gray-700">City</label>
+                  <input 
+                    type="text" 
+                    placeholder="City" 
+                    value={customer.city} 
+                    onChange={e => setCustomer({...customer, city: e.target.value})} 
+                    className="w-full p-2.5 border rounded-xl" 
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold block mb-1 text-gray-700">Pincode</label>
+                  <input 
+                    type="text" 
+                    placeholder="Pincode" 
+                    value={customer.pincode} 
+                    onChange={e => setCustomer({...customer, pincode: e.target.value})} 
+                    className="w-full p-2.5 border rounded-xl" 
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button 
+                  type="submit" 
+                  className="flex-1 bg-[#1A1A1A] text-white py-2.5 rounded-xl font-bold uppercase tracking-wider hover:bg-black cursor-pointer"
+                >
+                  Save Profile Details
+                </button>
+                <button 
+                  type="button" 
+                  onClick={handleCustomerLogout}
+                  className="p-2.5 bg-red-50 text-red-600 border border-red-200 rounded-xl hover:bg-red-100 transition cursor-pointer"
+                  title="Logout"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Product Quick View Modal */}
+      {selectedProduct && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto overflow-x-hidden shadow-2xl relative grid grid-cols-1 md:grid-cols-2">
+            <button 
+              onClick={() => setSelectedProduct(null)}
+              className="absolute top-4 right-4 z-10 bg-white/80 p-1.5 rounded-full hover:bg-black hover:text-white transition cursor-pointer"
+            >
+              <X className="w-4 h-4"/>
+            </button>
+
+            <div className="aspect-square bg-gray-50">
+              <img 
+                src={selectedProduct.image_url} 
+                alt={selectedProduct.title} 
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1611591475102-4ab8c4d7342d?q=80&w=800";
+                }}
+              />
+            </div>
+
+            <div className="p-6 flex flex-col justify-between space-y-4">
+              <div className="space-y-2">
+                <span className="text-[10px] text-[#C5A880] uppercase tracking-widest font-bold">{selectedProduct.category}</span>
+                <h3 className="font-serif text-xl font-bold text-gray-900">{selectedProduct.title}</h3>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl font-bold text-gray-900">₹{selectedProduct.price}</span>
+                  {selectedProduct.mrp && <span className="text-sm text-gray-400 line-through">₹{selectedProduct.mrp}</span>}
+                </div>
+                <p className="text-xs text-gray-600 leading-relaxed pt-2">
+                  {selectedProduct.description || "Crafted in 316L hypoallergenic surgical stainless steel with thick 18K gold plating. Anti-tarnish, sweat and water resistant for everyday wear."}
+                </p>
+              </div>
+
+              <div className="space-y-3 pt-4 border-t">
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-600">
+                  <div className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-[#C5A880]"/> Anti-Tarnish</div>
+                  <div className="flex items-center gap-1.5"><Droplets className="w-3.5 h-3.5 text-[#C5A880]"/> Waterproof</div>
+                </div>
+
+                <button 
+                  onClick={() => {
+                    handleAddToCartAttempt(selectedProduct);
+                    setSelectedProduct(null);
+                  }}
+                  className="w-full bg-[#1A1A1A] text-white py-3 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-black transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <ShoppingBag className="w-4 h-4" /> Add to Shopping Bag
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cart Drawer */}
+      {isCartOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex justify-end">
+          <div className="w-full max-w-md bg-white h-full p-6 flex flex-col justify-between shadow-2xl overflow-x-hidden">
+            <div>
+              <div className="flex justify-between items-center pb-4 border-b">
+                <h3 className="font-serif font-bold text-lg">Shopping Bag ({cart.length})</h3>
+                <button onClick={() => setIsCartOpen(false)} className="cursor-pointer"><X className="w-5 h-5"/></button>
+              </div>
+
+              <div className="divide-y max-h-[60vh] overflow-y-auto mt-4">
+                {cart.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-12">Your shopping bag is empty.</p>
+                ) : (
+                  cart.map(item => (
+                    <div key={item.id} className="py-4 flex gap-4 items-center">
+                      <img src={item.image_url} alt={item.title} className="w-14 h-14 rounded-xl object-cover border" />
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-xs text-gray-900">{item.title}</h4>
+                        <p className="text-xs font-bold text-gray-800 mt-0.5">₹{item.price} × {item.quantity}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {cart.length > 0 && (
+              <div className="border-t pt-4 space-y-3">
+                <div className="flex justify-between text-sm font-bold">
+                  <span>Total Amount</span>
+                  <span>₹{totalCartValue}</span>
+                </div>
+                <button 
+                  onClick={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }}
+                  className="w-full bg-[#1A1A1A] text-white py-3 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-black transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  Checkout Now <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Checkout Modal */}
+      {isCheckoutOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto overflow-x-hidden p-6 shadow-2xl">
+            {orderPlaced ? (
+              <div className="text-center py-8 space-y-3">
+                <CheckCircle className="w-16 h-16 text-green-600 mx-auto" />
+                <h3 className="font-serif font-bold text-2xl">Order Confirmed!</h3>
+                <p className="text-xs text-gray-500">Your order has been recorded. We will contact you on WhatsApp with dispatch details.</p>
+                <button 
+                  onClick={() => { setOrderPlaced(false); setIsCheckoutOpen(false); }}
+                  className="mt-4 bg-black text-white text-xs px-6 py-2.5 rounded-xl font-bold cursor-pointer"
+                >
+                  Back to Store
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handlePlaceOrder} className="space-y-3 text-xs">
+                <div className="flex justify-between items-center border-b pb-2">
+                  <h3 className="font-serif font-bold text-base">Delivery Address</h3>
+                  <button type="button" onClick={() => setIsCheckoutOpen(false)} className="cursor-pointer"><X className="w-4 h-4"/></button>
+                </div>
+
+                <div>
+                  <label className="font-semibold block mb-1">Full Name</label>
+                  <input required type="text" placeholder="e.g. Aditi Sharma" value={customer.name} onChange={e => setCustomer({...customer, name: e.target.value})} className="w-full p-2.5 border rounded-xl" />
+                </div>
+
+                <div>
+                  <label className="font-semibold block mb-1">WhatsApp Mobile Number</label>
+                  <input required disabled type="tel" value={customerUser?.phone || customer.phone} className="w-full p-2.5 border rounded-xl bg-gray-50 text-gray-600 font-semibold" />
+                </div>
+
+                <div>
+                  <label className="font-semibold block mb-1">Shipping Address</label>
+                  <textarea required rows={2} placeholder="Flat, Street, Landmark..." value={customer.address} onChange={e => setCustomer({...customer, address: e.target.value})} className="w-full p-2.5 border rounded-xl" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="font-semibold block mb-1">City</label>
+                    <input required type="text" placeholder="City" value={customer.city} onChange={e => setCustomer({...customer, city: e.target.value})} className="w-full p-2.5 border rounded-xl" />
+                  </div>
+                  <div>
+                    <label className="font-semibold block mb-1">Pincode</label>
+                    <input required type="text" placeholder="Pincode" value={customer.pincode} onChange={e => setCustomer({...customer, pincode: e.target.value})} className="w-full p-2.5 border rounded-xl" />
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 p-3 rounded-xl space-y-1">
+                  <div className="flex justify-between font-bold">
+                    <span>Payment Mode</span>
+                    <span className="text-green-700">Cash on Delivery (COD)</span>
+                  </div>
+                  <p className="text-[10px] text-gray-500">Pay when your jewellery is delivered to your doorstep.</p>
+                </div>
+
+                <button type="submit" className="w-full bg-[#1A1A1A] text-white py-3.5 rounded-xl font-bold hover:bg-black transition mt-2 text-xs uppercase tracking-wider cursor-pointer">
+                  Place Order • ₹{totalCartValue}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
