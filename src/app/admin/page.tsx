@@ -473,8 +473,10 @@ export default function AdminDashboard() {
     const matchesSearch =
       !searchQuery ||
       order.customer_name?.toLowerCase().includes(searchLower) ||
+      order.phone?.toLowerCase().includes(searchLower) ||
       order.customer_phone?.toLowerCase().includes(searchLower) ||
       order.id?.toString().includes(searchLower) ||
+      order.address?.toLowerCase().includes(searchLower) ||
       order.shipping_address?.toLowerCase().includes(searchLower);
 
     return matchesFilter && matchesSearch;
@@ -796,11 +798,13 @@ export default function AdminDashboard() {
 
                       <div className="text-sm font-semibold text-gray-900">
                         {order.customer_name || "Customer"} ·{" "}
-                        <span className="text-gray-600 font-normal">{order.customer_phone}</span>
+                        <span className="text-gray-600 font-normal">{order.phone || order.customer_phone || "No phone"}</span>
                       </div>
 
                       <div className="text-xs text-gray-500 leading-relaxed max-w-2xl">
-                        {order.shipping_address || "No address provided"}
+                        {order.address 
+                          ? `${order.address}${order.city ? `, ${order.city}` : ""}${order.pincode ? ` - ${order.pincode}` : ""}` 
+                          : (order.shipping_address || "No address provided")}
                       </div>
 
                       {order.cancellation_reason && (

@@ -43,7 +43,9 @@ import {
   ChevronLeft,
   ChevronRight,
   RotateCcw as ReturnIcon,
-  AlertCircle
+  AlertCircle,
+  Heart,
+  Eye
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -66,16 +68,19 @@ export default function Home() {
   
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
-  // Dynamic Banners from Supabase Database
+  // Wishlist State
+  const [wishlist, setWishlist] = useState<number[]>([]);
+
+  // Dynamic Banners from Supabase Database (Admin Controlled)
   const [heroBanners, setHeroBanners] = useState<any[]>([]);
   const [currentSlide, setCurrentSlide] = useState(0);
 
-  // Auto Slide Hero Banners every 5 seconds
+  // Auto Slide Hero Banners every 6 seconds
   useEffect(() => {
     if (heroBanners.length <= 1) return;
     const timer = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % heroBanners.length);
-    }, 5000);
+    }, 6000);
     return () => clearInterval(timer);
   }, [heroBanners.length]);
 
@@ -150,7 +155,26 @@ export default function Home() {
         pincode: parsed.pincode || ""
       }));
     }
+
+    const savedWishlist = localStorage.getItem("trovella_wishlist");
+    if (savedWishlist) {
+      try { setWishlist(JSON.parse(savedWishlist)); } catch (e) {}
+    }
   }, []);
+
+  const toggleWishlist = (productId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setWishlist(prev => {
+      let updated;
+      if (prev.includes(productId)) {
+        updated = prev.filter(id => id !== productId);
+      } else {
+        updated = [...prev, productId];
+      }
+      localStorage.setItem("trovella_wishlist", JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   const fetchInitialData = async () => {
     setLoading(true);
@@ -185,12 +209,11 @@ export default function Home() {
       setHeroBanners([
         {
           id: 1,
-          title: "ROYAL NECKLACES",
-          subtitle: "Min. 50% Off",
-          description: "Handcrafted 18K Gold Plated Masterpieces",
-          tag: "Festive Special",
-          category_target: "Necklaces",
-          image_url: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=800&q=80"
+          title: "Royal Gold Collection",
+          subtitle: "Handcrafted 18K gold plated masterpieces designed for timeless elegance.",
+          tag: "FESTIVE SPECIAL",
+          category_target: "All",
+          image_url: "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?q=80&w=1600&auto=format&fit=crop"
         }
       ]);
     }
@@ -754,6 +777,38 @@ export default function Home() {
 
   const categories = ["All", "Bracelets", "Rings", "Necklaces", "Earrings"];
 
+  // Independent Category Showcase Cards controlled via admin banners or fallback to stunning images
+  const categoryShowcaseCards = useMemo(() => {
+    if (heroBanners.length >= 3) {
+      return heroBanners.slice(0, 3).map((b, idx) => ({
+        title: b.title || (idx === 0 ? "Royal Necklaces" : idx === 1 ? "Signature Rings" : "Bracelets & Earrings"),
+        subtitle: b.tag || (idx === 0 ? "Timeless Polish" : idx === 1 ? "Everyday Sparkle" : "Chic & Graceful"),
+        categoryKey: b.category_target || (idx === 0 ? "Necklaces" : idx === 1 ? "Rings" : "Bracelets"),
+        image: b.image_url || "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?q=80&w=800&auto=format&fit=crop"
+      }));
+    }
+    return [
+      {
+        title: "Royal Necklaces",
+        subtitle: "Timeless Polish",
+        categoryKey: "Necklaces",
+        image: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?q=80&w=800&auto=format&fit=crop"
+      },
+      {
+        title: "Signature Rings",
+        subtitle: "Everyday Sparkle",
+        categoryKey: "Rings",
+        image: "https://images.unsplash.com/photo-1603561591411-07134e71a2a9?q=80&w=800&auto=format&fit=crop"
+      },
+      {
+        title: "Bracelets & Earrings",
+        subtitle: "Chic & Graceful",
+        categoryKey: "Bracelets",
+        image: "https://images.unsplash.com/photo-1611591475102-4ab8c4d7342d?q=80&w=800&auto=format&fit=crop"
+      }
+    ];
+  }, [heroBanners]);
+
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#070709] text-white font-sans antialiased selection:bg-[#C5A880] selection:text-black">
       
@@ -827,97 +882,146 @@ export default function Home() {
         </div>
       </header>
 
-      {/* ULTRA LUXURIOUS 3D HERO BANNER CAROUSEL */}
-      <section className="relative w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-6">
-        <div className="relative w-full h-[280px] sm:h-[420px] rounded-[3rem] overflow-hidden shadow-[0_25px_60px_rgba(0,0,0,0.9)] border border-white/20 group bg-[#111116]">
-          
-          {heroBanners.map((banner, index) => (
-            <div
-              key={banner.id}
+      {/* FULL-WIDTH IMMERSIVE CINEMATIC HERO CAROUSEL (Admin Controlled via Banners) */}
+      <section className="relative w-full h-[520px] sm:h-[650px] overflow-hidden bg-[#050507] group">
+        
+        {heroBanners.map((banner, index) => (
+          <div
+            key={banner.id}
+            className={`absolute inset-0 transition-all duration-1000 ease-in-out flex items-center ${
+              index === currentSlide ? "opacity-100 scale-100 z-10" : "opacity-0 scale-105 pointer-events-none z-0"
+            }`}
+          >
+            {/* Background Model + Jewellery Image with Deep Professional Gradient */}
+            <div className="absolute inset-0 z-0">
+              <img 
+                src={banner.image_url || "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?q=80&w=1600&auto=format&fit=crop"} 
+                alt="Royal Gold Collection" 
+                className="w-full h-full object-cover object-center scale-105 group-hover:scale-100 transition-transform duration-1000 opacity-80"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-black via-black/80 to-transparent sm:via-black/70" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/30" />
+            </div>
+
+            {/* Foreground Content */}
+            <div className="relative z-10 max-w-4xl mx-auto px-6 sm:px-12 lg:px-16 w-full space-y-6">
+              
+              {/* Dynamic Tag / Category */}
+              <div className="inline-flex items-center gap-2 text-[11px] sm:text-xs uppercase tracking-[0.4em] font-extrabold text-[#C5A880] bg-white/10 backdrop-blur-2xl px-5 py-2 rounded-full border border-white/25 shadow-[0_0_25px_rgba(197,168,128,0.4)]">
+                <Sparkles className="w-3.5 h-3.5 text-[#C5A880] animate-pulse" />
+                <span>{banner.tag || "FESTIVE SPECIAL"}</span>
+              </div>
+
+              {/* Main Title: Royal Gold Collection */}
+              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-serif font-extrabold text-white tracking-tight leading-[1.1] drop-shadow-[0_4px_25px_rgba(0,0,0,0.9)] max-w-2xl">
+                {banner.title || "Royal Gold Collection"}
+              </h1>
+
+              {/* Subtitle / Description */}
+              <p className="text-sm sm:text-lg text-gray-200 font-light leading-relaxed max-w-xl tracking-wide drop-shadow-md">
+                {banner.subtitle || "Handcrafted 18K gold plated masterpieces designed for timeless elegance."}
+              </p>
+
+              {/* Single CTA: Shop Now */}
+              <div className="pt-4">
+                <button 
+                  onClick={() => {
+                    setActiveCategory(banner.category_target || "All");
+                    const el = document.getElementById("catalog-section");
+                    if (el) el.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className="bg-white text-black hover:bg-[#C5A880] hover:text-black transition-all duration-300 text-xs sm:text-sm font-black uppercase tracking-[0.25em] px-10 py-4 rounded-full shadow-[0_0_35px_rgba(255,255,255,0.3)] cursor-pointer flex items-center gap-3 transform hover:scale-105"
+                >
+                  Shop Now <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+
+            </div>
+          </div>
+        ))}
+
+        {/* Slider Navigation Arrows */}
+        {heroBanners.length > 1 && (
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentSlide((prev) => (prev === 0 ? heroBanners.length - 1 : prev - 1));
+              }}
+              className="absolute left-6 top-1/2 -translate-y-1/2 z-25 w-12 h-12 rounded-full bg-black/60 backdrop-blur-md text-white border border-white/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-2xl cursor-pointer hover:bg-white hover:text-black"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+            
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentSlide((prev) => (prev + 1) % heroBanners.length);
+              }}
+              className="absolute right-6 top-1/2 -translate-y-1/2 z-25 w-12 h-12 rounded-full bg-black/60 backdrop-blur-md text-white border border-white/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-2xl cursor-pointer hover:bg-white hover:text-black"
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
+
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-25 flex gap-2.5">
+              {heroBanners.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCurrentSlide(idx);
+                  }}
+                  className={`h-2.5 rounded-full transition-all duration-500 cursor-pointer ${
+                    idx === currentSlide ? "w-12 bg-[#C5A880] shadow-[0_0_12px_#C5A880]" : "w-3 bg-white/40 hover:bg-white"
+                  }`}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+      </section>
+
+      {/* INDEPENDENT CATEGORY SHOWCASE TEASER GRID (Controlled via Admin Banners) */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-4">
+        <div className="text-center space-y-3 mb-10">
+          <span className="text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] text-[#C5A880]">ELEVATE YOUR WARDROBE</span>
+          <h2 className="text-2xl sm:text-4xl font-serif font-bold text-white">Explore By Category</h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {categoryShowcaseCards.map((card, cIdx) => (
+            <div 
+              key={cIdx}
               onClick={() => {
-                setActiveCategory(banner.category_target || "All");
+                setActiveCategory(card.categoryKey);
                 const el = document.getElementById("catalog-section");
                 if (el) el.scrollIntoView({ behavior: "smooth" });
               }}
-              className={`absolute inset-0 transition-all duration-700 ease-in-out cursor-pointer flex items-center justify-between p-8 sm:p-16 bg-gradient-to-r from-neutral-950 via-[#181822] to-[#070709] ${
-                index === currentSlide ? "opacity-100 scale-100 z-10" : "opacity-0 scale-105 pointer-events-none z-0"
-              }`}
+              className="relative h-[320px] rounded-[2.5rem] overflow-hidden group cursor-pointer border border-white/10 shadow-2xl bg-black"
             >
-              {/* Left Content */}
-              <div className="max-w-lg space-y-4 sm:space-y-6 z-10">
-                <span className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs uppercase tracking-[0.3em] font-black text-[#C5A880] bg-white/10 backdrop-blur-xl px-4 py-1.5 rounded-full border border-white/20 shadow-[0_0_15px_rgba(197,168,128,0.3)]">
-                  <Sparkles className="w-3 h-3 text-[#C5A880]" /> {banner.tag || "Exclusive Luxury"}
-                </span>
-                <h2 className="text-3xl sm:text-6xl font-serif font-extrabold text-white tracking-wide drop-shadow-[0_4px_10px_rgba(0,0,0,0.8)]">
-                  {banner.title}
-                </h2>
-                <div className="text-2xl sm:text-4xl font-serif font-bold text-[#C5A880] drop-shadow-md">
-                  {banner.subtitle}
+              <img 
+                src={card.image} 
+                alt={card.title} 
+                className="w-full h-full object-cover group-hover:scale-110 transition duration-700 opacity-90"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+              <div className="absolute bottom-6 left-6 right-6 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-[#C5A880] uppercase tracking-widest">{card.subtitle}</span>
+                  <h3 className="font-serif text-xl font-bold text-white mt-0.5">{card.title}</h3>
                 </div>
-                <p className="text-xs sm:text-sm text-gray-300 font-light max-w-md hidden sm:block leading-relaxed tracking-wider">
-                  {banner.description || "Crafted with precision for the modern icon. 18K gold plated perfection."}
-                </p>
-                <div className="pt-2">
-                  <span className="inline-flex items-center gap-2.5 bg-gradient-to-r from-[#C5A880] to-[#dfc49c] text-black hover:brightness-110 text-xs font-black uppercase tracking-[0.25em] px-8 py-3.5 rounded-full shadow-[0_0_25px_rgba(197,168,128,0.5)] transition">
-                    Explore Collection <ArrowRight className="w-4 h-4" />
-                  </span>
+                <div className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white group-hover:bg-[#C5A880] group-hover:text-black transition">
+                  <ArrowRight className="w-4 h-4" />
                 </div>
-              </div>
-
-              {/* Right Banner Image with Glow Depth */}
-              <div className="relative w-44 sm:w-80 h-44 sm:h-80 rounded-[2.5rem] overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.8)] border-2 border-white/25 shrink-0 bg-black group-hover:scale-105 transition duration-700">
-                <img 
-                  src={banner.image_url} 
-                  alt={banner.title} 
-                  className="w-full h-full object-cover block" 
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
               </div>
             </div>
           ))}
-
-          {/* Navigation Arrows */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setCurrentSlide((prev) => (prev === 0 ? heroBanners.length - 1 : prev - 1));
-            }}
-            className="absolute left-5 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-black/70 backdrop-blur-md text-white border border-white/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-xl cursor-pointer hover:bg-white hover:text-black"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setCurrentSlide((prev) => (prev + 1) % heroBanners.length);
-            }}
-            className="absolute right-5 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-black/70 backdrop-blur-md text-white border border-white/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-xl cursor-pointer hover:bg-white hover:text-black"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-
-          {/* Pagination Dots */}
-          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex gap-2.5">
-            {heroBanners.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setCurrentSlide(idx);
-                }}
-                className={`h-2 rounded-full transition-all duration-500 cursor-pointer ${
-                  idx === currentSlide ? "w-10 bg-[#C5A880] shadow-[0_0_10px_#C5A880]" : "w-2.5 bg-white/40 hover:bg-white"
-                }`}
-              />
-            ))}
-          </div>
-
         </div>
       </section>
 
       {/* Trust Bar */}
-      <div className="border-b border-white/10 bg-[#0d0d12] shadow-2xl relative z-20 mt-6">
+      <div className="border-b border-white/10 bg-[#0d0d12] shadow-2xl relative z-25 mt-8">
         <div className="max-w-7xl mx-auto px-4 py-8 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
           <div className="flex flex-col items-center p-5 rounded-3xl bg-white/[0.03] border border-white/10 shadow-xl hover:border-[#C5A880]/60 transition duration-300">
             <Droplets className="w-6 h-6 text-[#C5A880] mb-2 drop-shadow-[0_0_8px_#C5A880]" />
@@ -1011,7 +1115,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Products Grid with Live Low Stock Urgency Badges */}
+        {/* Products Grid with Advanced Hover Effects (Quick View, Wishlist ❤️, & 2nd Image on Hover) */}
         {loading ? (
           <div className="text-center py-28 space-y-4">
             <Loader2 className="w-10 h-10 mx-auto animate-spin text-[#C5A880]" />
@@ -1040,45 +1144,77 @@ export default function Home() {
               const currentStock = Number(product.stock ?? (product.is_in_stock !== false ? 10 : 0));
               const isInStock = product.is_in_stock !== false && currentStock > 0;
               const isLowStock = isInStock && currentStock <= 5;
+              const isWishlisted = wishlist.includes(product.id);
+
+              const primaryImg = product.image_url || product.image;
+              const secondaryImg = (product.images && product.images.length > 1) ? product.images[1] : primaryImg;
 
               return (
                 <div 
                   key={product.id} 
                   onClick={() => setSelectedProduct(product)}
-                  className={`group bg-[#12121a] rounded-[2.5rem] border p-5 flex flex-col justify-between hover:shadow-[0_20px_50px_rgba(197,168,128,0.2)] hover:border-[#C5A880]/60 transition-all duration-500 cursor-pointer relative overflow-hidden transform hover:-translate-y-2 ${
+                  className={`group bg-[#12121a] rounded-[2.5rem] border p-5 flex flex-col justify-between hover:shadow-[0_20px_50px_rgba(197,168,128,0.25)] hover:border-[#C5A880]/60 transition-all duration-500 cursor-pointer relative overflow-hidden transform hover:-translate-y-2 ${
                     isInStock ? "border-white/10" : "border-white/5 opacity-75"
                   }`}
                 >
                   <div className="relative aspect-square overflow-hidden rounded-[2rem] bg-[#070709] mb-4 shadow-inner border border-white/5">
                     {!isInStock ? (
-                      <span className="absolute top-3.5 left-3.5 z-10 bg-red-600 text-white text-[9px] font-black uppercase px-3.5 py-1 rounded-full shadow-lg tracking-widest">
+                      <span className="absolute top-3.5 left-3.5 z-15 bg-red-600 text-white text-[9px] font-black uppercase px-3.5 py-1 rounded-full shadow-lg tracking-widest">
                         Sold Out
                       </span>
                     ) : isLowStock ? (
-                      <span className="absolute top-3.5 left-3.5 z-10 bg-amber-500 text-black text-[9px] font-black uppercase px-3 py-1 rounded-full shadow-lg tracking-wider flex items-center gap-1 animate-pulse">
+                      <span className="absolute top-3.5 left-3.5 z-15 bg-amber-500 text-black text-[9px] font-black uppercase px-3 py-1 rounded-full shadow-lg tracking-wider flex items-center gap-1 animate-pulse">
                         <AlertCircle className="w-3 h-3" /> Only {currentStock} left!
                       </span>
                     ) : (
-                      <span className="absolute top-3.5 left-3.5 z-10 bg-black/80 backdrop-blur-md text-[9px] font-extrabold uppercase px-3 py-1 rounded-full border border-white/15 shadow-md tracking-wider text-[#C5A880]">
+                      <span className="absolute top-3.5 left-3.5 z-15 bg-black/80 backdrop-blur-md text-[9px] font-extrabold uppercase px-3 py-1 rounded-full border border-white/15 shadow-md tracking-wider text-[#C5A880]">
                         {product.tag || "3D Anti-Tarnish"}
                       </span>
                     )}
 
+                    {/* Wishlist ❤️ Button */}
+                    <button
+                      onClick={(e) => toggleWishlist(product.id, e)}
+                      className={`absolute top-3.5 right-3.5 z-20 w-9 h-9 rounded-full flex items-center justify-center backdrop-blur-md transition-all shadow-lg cursor-pointer transform hover:scale-110 active:scale-95 ${
+                        isWishlisted ? "bg-red-500 text-white shadow-[0_0_12px_rgba(239,68,68,0.8)]" : "bg-black/60 text-white hover:bg-white hover:text-black border border-white/20"
+                      }`}
+                      title={isWishlisted ? "Remove from Wishlist" : "Add to Wishlist"}
+                    >
+                      <Heart className={`w-4 h-4 ${isWishlisted ? "fill-white" : ""}`} />
+                    </button>
+
+                    {/* Quick View Button on Hover */}
+                    <div className="absolute inset-x-0 bottom-3 z-20 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+                      <span className="bg-black/80 backdrop-blur-md text-white text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-xl border border-white/20 shadow-2xl flex items-center gap-1.5 pointer-events-auto hover:bg-[#C5A880] hover:text-black transition">
+                        <Eye className="w-3.5 h-3.5" /> Quick View
+                      </span>
+                    </div>
+
                     {avgRating && (
-                      <span className="absolute bottom-3.5 left-3.5 z-10 bg-black/90 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-md border border-white/10">
+                      <span className="absolute bottom-3.5 left-3.5 z-15 bg-black/90 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-md border border-white/10">
                         <Star className="w-3 h-3 fill-amber-400 text-amber-400" /> {avgRating} ({prodReviews.length})
                       </span>
                     )}
 
+                    {/* Image 1 (Primary) */}
                     <img 
-                      src={product.image_url} 
+                      src={primaryImg} 
                       alt={product.title} 
-                      className={`w-full h-full object-cover object-center group-hover:scale-110 transition-transform duration-700 ${
+                      className={`absolute inset-0 w-full h-full object-cover object-center group-hover:opacity-0 transition-opacity duration-500 ${
                         !isInStock ? "grayscale contrast-75" : ""
                       }`}
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1611591475102-4ab8c4d7342d?q=80&w=800";
                       }}
+                    />
+
+                    {/* Image 2 (Shown on Hover) */}
+                    <img 
+                      src={secondaryImg} 
+                      alt={`${product.title} alternate view`}
+                      className={`absolute inset-0 w-full h-full object-cover object-center opacity-0 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700 ${
+                        !isInStock ? "grayscale contrast-75" : ""
+                      }`}
                     />
                   </div>
 
@@ -1094,7 +1230,7 @@ export default function Home() {
                   {isInStock ? (
                     <button 
                       onClick={(e) => handleAddToCartAttempt(product, e)}
-                      className="mt-5 w-full bg-white text-black py-3.5 rounded-2xl text-xs font-bold uppercase tracking-wider hover:bg-[#C5A880] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg group-hover:shadow-[0_0_25px_rgba(197,168,128,0.5)]"
+                      className="mt-5 w-full bg-white text-black py-3.5 rounded-2xl text-xs font-bold uppercase tracking-wider hover:bg-[#C5A880] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg group-hover:shadow-[0_0_25px_rgba(197,168,128,0.5)] transform active:scale-95"
                     >
                       <ShoppingBag className="w-3.5 h-3.5" /> Add to Bag
                     </button>
@@ -1188,7 +1324,7 @@ export default function Home() {
               {selectedProduct.is_in_stock !== false ? (
                 <button 
                   onClick={(e) => handleAddToCartAttempt(selectedProduct, e)}
-                  className="w-full bg-gradient-to-r from-[#C5A880] to-[#dfc49c] text-black py-4 rounded-2xl text-xs font-black uppercase tracking-[0.2em] hover:brightness-110 transition flex items-center justify-center gap-2.5 cursor-pointer shadow-[0_0_30px_rgba(197,168,128,0.5)]"
+                  className="w-full bg-gradient-to-r from-[#C5A880] to-[#dfc49c] text-black py-4 rounded-2xl text-xs font-black uppercase tracking-[0.2em] hover:brightness-110 transition flex items-center justify-center gap-2.5 cursor-pointer shadow-[0_0_30px_rgba(197,168,128,0.5)] transform active:scale-95"
                 >
                   <ShoppingBag className="w-4 h-4" /> Add to Shopping Bag
                 </button>
